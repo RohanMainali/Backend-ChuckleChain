@@ -1,6 +1,5 @@
 const User = require("../models/User")
 
-
 // @desc    Register user
 // @route   POST /api/auth/signup
 // @access  Public
@@ -23,6 +22,41 @@ exports.signup = async (req, res) => {
       username,
       email,
       password,
+    })
+
+    // Send token response
+    sendTokenResponse(user, 201, res)
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    })
+  }
+}
+
+// @desc    Register admin user
+// @route   POST /api/auth/admin-signup
+// @access  Private (requires admin token)
+exports.adminSignup = async (req, res) => {
+  try {
+    const { username, email, password } = req.body
+
+    // Check if user already exists
+    const userExists = await User.findOne({ $or: [{ email }, { username }] })
+
+    if (userExists) {
+      return res.status(400).json({
+        success: false,
+        message: userExists.email === email ? "Email already in use" : "Username already taken",
+      })
+    }
+
+    // Create admin user
+    const user = await User.create({
+      username,
+      email,
+      password,
+      role: "admin",
     })
 
     // Send token response
@@ -84,15 +118,10 @@ exports.login = async (req, res) => {
 // @route   GET /api/auth/logout
 // @access  Private
 exports.logout = (req, res) => {
-  // Updated cookie options for cross-domain
-  const cookieOptions = {
+  res.cookie("token", "none", {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
-    secure: true,
-    sameSite: "none",
-  }
-
-  res.cookie("token", "none", cookieOptions)
+  })
 
   res.status(200).json({
     success: true,
@@ -124,12 +153,9 @@ const sendTokenResponse = (user, statusCode, res) => {
   // Create token
   const token = user.getSignedJwtToken()
 
-  // Cookie options for cross-domain
   const options = {
     expires: new Date(Date.now() + process.env.JWT_EXPIRE.match(/\d+/)[0] * 24 * 60 * 60 * 1000),
     httpOnly: true,
-    secure: true, // Required for cross-domain cookies
-    sameSite: "none", // Required for cross-domain cookies
   }
 
   // Remove password from output
@@ -137,7 +163,7 @@ const sendTokenResponse = (user, statusCode, res) => {
 
   res.status(statusCode).cookie("token", token, options).json({
     success: true,
-    token, // Include token in response body for localStorage
+    token,
     data: user,
   })
 }

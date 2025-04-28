@@ -1,3 +1,7 @@
+// Add this line near the top of your server.js file
+// to ensure environment variables are loaded
+require("dotenv").config()
+
 const express = require("express")
 const cors = require("cors")
 const mongoose = require("mongoose")
@@ -82,16 +86,13 @@ app.use(
 
       if (allowedOrigins.indexOf(origin) === -1) {
         const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`
-        console.warn(msg)
-        // Still allow the connection but log a warning
-        // return callback(new Error(msg), false);
+        return callback(new Error(msg), false)
       }
       return callback(null, true)
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-    exposedHeaders: ["Set-Cookie"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   }),
 )
 
@@ -101,6 +102,9 @@ mongoose
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err))
 
+// Add this line to your server.js file to include the admin routes
+const adminRoutes = require("./routes/admin")
+
 // Routes
 app.use("/api/auth", authRoutes)
 app.use("/api/users", userRoutes)
@@ -108,6 +112,9 @@ app.use("/api/upload", uploadRoutes)
 app.use("/api/posts", postRoutes)
 app.use("/api/notifications", notificationRoutes)
 app.use("/api/messages", messageRoutes)
+
+// Add this line where you define your routes
+app.use("/api/admin", adminRoutes)
 
 // Health check route
 app.get("/api/health", (req, res) => {
@@ -131,4 +138,7 @@ app.use(errorHandler)
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
+
+// Make sure the ADMIN_REGISTRATION_TOKEN is available
+console.log("Admin token configured:", process.env.ADMIN_REGISTRATION_TOKEN ? "Yes" : "No")
 
