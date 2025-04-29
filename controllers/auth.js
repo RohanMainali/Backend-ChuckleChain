@@ -150,7 +150,7 @@ exports.getMe = async (req, res) => {
 
 // Helper function to get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
-  // Create token
+  // Create token with role included
   const token = user.getSignedJwtToken()
 
   const options = {
@@ -158,12 +158,6 @@ const sendTokenResponse = (user, statusCode, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production", // Use secure cookies in production
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // Required for cross-domain cookies
-  }
-
-  // Add the domain option for production
-  if (process.env.NODE_ENV === "production") {
-    // Use the render.com domain
-    options.domain = ".onrender.com"
   }
 
   // Remove password from output

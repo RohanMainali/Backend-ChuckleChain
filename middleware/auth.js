@@ -27,7 +27,7 @@ exports.protect = async (req, res, next) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    console.log("Token verified for user:", decoded.id)
+    console.log("Token verified for user:", decoded.id, "with role:", decoded.role)
 
     // Get user from the token
     req.user = await User.findById(decoded.id)
@@ -39,6 +39,9 @@ exports.protect = async (req, res, next) => {
         message: "User not found",
       })
     }
+
+    // Add role to request for easier access
+    req.user.role = decoded.role || req.user.role
 
     next()
   } catch (err) {

@@ -4,6 +4,14 @@ const User = require("../models/User")
 exports.isAdmin = async (req, res, next) => {
   try {
     // Check if user exists and is an admin
+    // First check if the role is already in the request
+    if (req.user && req.user.role === "admin") {
+      // Add user to request object for convenience
+      req.adminUser = req.user
+      return next()
+    }
+
+    // If not, fetch from database to double-check
     const user = await User.findById(req.user.id)
 
     if (!user) {
@@ -14,6 +22,7 @@ exports.isAdmin = async (req, res, next) => {
     }
 
     if (user.role !== "admin") {
+      console.log(`User ${user.username} (${user._id}) attempted to access admin route but has role: ${user.role}`)
       return res.status(403).json({
         success: false,
         message: "Access denied: Admin privileges required",
