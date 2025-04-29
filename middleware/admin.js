@@ -6,15 +6,26 @@ exports.isAdmin = async (req, res, next) => {
     // Check if user exists and is an admin
     const user = await User.findById(req.user.id)
 
-    if (!user || user.role !== "admin") {
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    if (user.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Access denied: Admin privileges required",
       })
     }
 
+    // Add user to request object for convenience
+    req.adminUser = user
+
     next()
   } catch (err) {
+    console.error("Admin middleware error:", err)
     return res.status(500).json({
       success: false,
       message: "Server error while checking admin privileges",
@@ -44,4 +55,3 @@ exports.verifyAdminToken = (req, res, next) => {
 
   next()
 }
-

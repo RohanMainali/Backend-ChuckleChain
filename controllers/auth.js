@@ -156,6 +156,14 @@ const sendTokenResponse = (user, statusCode, res) => {
   const options = {
     expires: new Date(Date.now() + process.env.JWT_EXPIRE.match(/\d+/)[0] * 24 * 60 * 60 * 1000),
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // Use secure cookies in production
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // Required for cross-domain cookies
+  }
+
+  // Add the domain option for production
+  if (process.env.NODE_ENV === "production") {
+    // Use the render.com domain
+    options.domain = ".onrender.com"
   }
 
   // Remove password from output
@@ -167,4 +175,3 @@ const sendTokenResponse = (user, statusCode, res) => {
     data: user,
   })
 }
-
