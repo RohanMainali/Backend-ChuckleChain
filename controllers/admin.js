@@ -32,26 +32,341 @@ exports.getStats = async (req, res) => {
     // Get flagged posts count (assuming posts have a 'flagged' field)
     const flaggedPosts = await Post.countDocuments({ flagged: true })
 
+    // Calculate growth percentages (comparing to previous period)
+    const previousWeekUsers = await User.countDocuments({
+      createdAt: {
+        $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+        $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    })
+
+    const previousWeekPosts = await Post.countDocuments({
+      createdAt: {
+        $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+        $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    })
+
+    const userGrowth =
+      previousWeekUsers > 0 ? Math.round(((lastWeekUsers - previousWeekUsers) / previousWeekUsers) * 100) : 0
+
+    const postGrowth =
+      previousWeekPosts > 0 ? Math.round(((lastWeekPosts - previousWeekPosts) / previousWeekPosts) * 100) : 0
+
+    // Get user history data (last 7 days)
+    const userHistory = await getUserHistory(7)
+
+    // Get post history data (last 7 days)
+    const postHistory = await getPostHistory(7)
+
+    // Get post categories distribution
+    const postCategories = await getPostCategories()
+
+    // Get engagement metrics
+    const engagement = await getEngagementMetrics()
+
+    // Get top hashtags
+    const topHashtags = await getTopHashtags(5)
+
+    // Get active users by day
+    const activeUsers = await getActiveUsersByDay(7)
+
+    // Get posts by time of day
+    const postsByTime = await getPostsByTimeOfDay()
+
     res.status(200).json({
       success: true,
       data: {
         users: {
           total: totalUsers,
           lastWeek: lastWeekUsers,
+          growth: userGrowth,
+          history: userHistory,
         },
         posts: {
           total: totalPosts,
           lastWeek: lastWeekPosts,
+          growth: postGrowth,
           flagged: flaggedPosts,
+          history: postHistory,
+          byCategory: postCategories,
         },
+        engagement: engagement,
+        storage: {
+          used: 0, // Will be updated by cloudinary stats endpoint
+          limit: 1000000000, // Default 1GB limit for example
+          percentage: 0,
+        },
+        topHashtags: topHashtags,
+        activeUsers: activeUsers,
+        postsByTime: postsByTime,
       },
     })
   } catch (error) {
+    console.error("Error fetching admin stats:", error)
     res.status(500).json({
       success: false,
       message: error.message,
     })
   }
+}
+
+// Helper function to get user registration history
+async function getUserHistory(days) {
+  const history = []
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    date.setHours(0, 0, 0, 0)
+
+    const nextDate = new Date(date)
+    nextDate.setDate(nextDate.getDate() + 1)
+
+    const count = await User.countDocuments({
+      createdAt: {
+        $gte: date,
+        $lt: nextDate,
+      },
+    })
+
+    history.unshift({
+      date: date.toISOString().split("T")[0],
+      count,
+    })
+  }
+
+  return history
+}
+
+// Helper function to get post creation history
+async function getPostHistory(days) {
+  const history = []
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    date.setHours(0, 0, 0, 0)
+
+    const nextDate = new Date(date)
+    nextDate.setDate(nextDate.getDate() + 1)
+
+    const count = await Post.countDocuments({
+      createdAt: {
+        $gte: date,
+        $lt: nextDate,
+      },
+    })
+
+    history.unshift({
+      date: date.toISOString().split("T")[0],
+      count,
+    })
+  }
+
+  return history
+}
+
+// Helper function to get post categories distribution
+async function getPostCategories() {
+  const categories = {
+    entertainment: 0,
+    sports: 0,
+    gaming: 0,
+    technology: 0,
+    fashion: 0,
+    music: 0,
+    tv: 0,
+    other: 0,
+  }
+
+  // Get counts for each category
+  const categoryCounts = await Post.aggregate([
+    {
+      $group: {
+        _id: "$category",
+        count: { $sum: 1 },
+      },
+    },
+  ])
+
+  // Update the categories object with actual counts
+  categoryCounts.forEach((cat) => {
+    if (cat._id && categories.hasOwnProperty(cat._id)) {
+      categories[cat._id] = cat.count
+    } else if (cat._id) {
+      categories.other += cat.count
+    }
+  })
+
+  return categories
+}
+
+// Helper function to get engagement metrics
+async function getEngagementMetrics() {
+  // Get total likes across all posts
+  const likesResult = await Post.aggregate([
+    {
+      $project: {
+        likeCount: { $size: "$likes" },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$likeCount" },
+      },
+    },
+  ])
+
+  // Get total comments across all posts
+  const commentsResult = await Post.aggregate([
+    {
+      $project: {
+        commentCount: { $size: "$comments" },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$commentCount" },
+      },
+    },
+  ])
+
+  // For shares, we don't have direct data, so we'll estimate
+  // In a real app, you'd track shares separately
+  const totalLikes = likesResult.length > 0 ? likesResult[0].total : 0
+  const totalComments = commentsResult.length > 0 ? commentsResult[0].total : 0
+  const estimatedShares = Math.floor(totalLikes * 0.2) // Assuming 20% of likes result in shares
+
+  // Get engagement history for the last 7 days
+  const history = []
+  for (let i = 0; i < 7; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    date.setHours(0, 0, 0, 0)
+
+    const nextDate = new Date(date)
+    nextDate.setDate(nextDate.getDate() + 1)
+
+    // Get posts from this day
+    const posts = await Post.find({
+      createdAt: {
+        $gte: date,
+        $lt: nextDate,
+      },
+    })
+
+    // Count likes, comments, and estimate shares
+    let dayLikes = 0
+    let dayComments = 0
+
+    posts.forEach((post) => {
+      dayLikes += post.likes.length
+      dayComments += post.comments.length
+    })
+
+    const dayShares = Math.floor(dayLikes * 0.2)
+
+    history.unshift({
+      date: date.toISOString().split("T")[0],
+      likes: dayLikes,
+      comments: dayComments,
+      shares: dayShares,
+    })
+  }
+
+  return {
+    likes: totalLikes,
+    comments: totalComments,
+    shares: estimatedShares,
+    history: history,
+  }
+}
+
+// Helper function to get top hashtags
+async function getTopHashtags(limit) {
+  // Aggregate hashtags across all posts
+  const hashtagCounts = await Post.aggregate([
+    { $unwind: "$hashtags" },
+    {
+      $group: {
+        _id: "$hashtags",
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { count: -1 } },
+    { $limit: limit },
+  ])
+
+  return hashtagCounts.map((tag) => ({
+    tag: tag._id,
+    count: tag.count,
+  }))
+}
+
+// Helper function to get active users by day
+async function getActiveUsersByDay(days) {
+  const history = []
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    date.setHours(0, 0, 0, 0)
+
+    const nextDate = new Date(date)
+    nextDate.setDate(nextDate.getDate() + 1)
+
+    // Count unique users who posted on this day
+    const uniqueUsers = await Post.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: date,
+            $lt: nextDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$user",
+        },
+      },
+      {
+        $count: "count",
+      },
+    ])
+
+    const count = uniqueUsers.length > 0 ? uniqueUsers[0].count : 0
+
+    history.unshift({
+      date: date.toISOString().split("T")[0],
+      count,
+    })
+  }
+
+  return history
+}
+
+// Helper function to get posts by time of day
+async function getPostsByTimeOfDay() {
+  const hourCounts = Array(24).fill(0)
+
+  // Get all posts
+  const posts = await Post.find({}, { createdAt: 1 })
+
+  // Count posts by hour
+  posts.forEach((post) => {
+    const hour = new Date(post.createdAt).getHours()
+    hourCounts[hour]++
+  })
+
+  // Format for chart
+  return hourCounts.map((count, hour) => ({
+    hour,
+    count,
+  }))
 }
 
 // @desc    Get Cloudinary usage stats
@@ -85,6 +400,12 @@ exports.getCloudinaryStats = async (req, res) => {
     try {
       const result = await cloudinary.api.usage()
 
+      // Get storage history for the last 7 days
+      const storageHistory = await getStorageHistory(7)
+
+      // Add storage history to the result
+      result.storage_history = storageHistory
+
       res.status(200).json({
         success: true,
         data: result,
@@ -113,6 +434,42 @@ exports.getCloudinaryStats = async (req, res) => {
       message: error.message,
     })
   }
+}
+
+// Helper function to simulate storage history
+// In a real app, you would track this data over time
+async function getStorageHistory(days) {
+  // Get current storage usage
+  let currentUsage = 0
+
+  try {
+    const result = await cloudinary.api.usage()
+    currentUsage = result.usage.storage.used || 0
+  } catch (error) {
+    console.error("Error getting Cloudinary usage:", error)
+  }
+
+  // Generate history with a slight decrease each day going back
+  const history = []
+  let usage = currentUsage
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+
+    // Reduce usage by a random amount (1-5%) for each day back
+    if (i > 0) {
+      const reductionFactor = 1 - (Math.random() * 0.04 + 0.01)
+      usage = Math.floor(usage * reductionFactor)
+    }
+
+    history.unshift({
+      date: date.toISOString().split("T")[0],
+      used: usage,
+    })
+  }
+
+  return history
 }
 
 // @desc    Download posts/memes as a zip file
