@@ -11,6 +11,7 @@ const {
   getCloudinaryStats,
   downloadPosts,
   downloadMemes,
+  updateUserStatus,
 } = require("../controllers/admin")
 const { protect } = require("../middleware/auth")
 const { isAdmin } = require("../middleware/admin")
@@ -30,6 +31,7 @@ router.get("/users", getUsers)
 router.get("/users/:id", getUser)
 router.put("/users/:id", updateUser)
 router.delete("/users/:id", deleteUser)
+router.put("/users/:id/status", updateUserStatus)
 
 // Post routes
 router.get("/posts", getPosts)

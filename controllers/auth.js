@@ -5,7 +5,7 @@ const User = require("../models/User")
 // @access  Public
 exports.signup = async (req, res) => {
   try {
-    const { username, email, password } = req.body
+    const { username, email, password, preventLogin } = req.body
 
     // Check if user already exists
     const userExists = await User.findOne({ $or: [{ email }, { username }] })
@@ -24,7 +24,20 @@ exports.signup = async (req, res) => {
       password,
     })
 
-    // Send token response
+    // If preventLogin is true, just return success without token
+    if (preventLogin) {
+      return res.status(201).json({
+        success: true,
+        data: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+        },
+      })
+    }
+
+    // Otherwise send token response (default behavior)
     sendTokenResponse(user, 201, res)
   } catch (error) {
     res.status(500).json({
@@ -39,7 +52,7 @@ exports.signup = async (req, res) => {
 // @access  Private (requires admin token)
 exports.adminSignup = async (req, res) => {
   try {
-    const { username, email, password } = req.body
+    const { username, email, password, preventLogin } = req.body
 
     // Check if user already exists
     const userExists = await User.findOne({ $or: [{ email }, { username }] })
@@ -59,7 +72,20 @@ exports.adminSignup = async (req, res) => {
       role: "admin",
     })
 
-    // Send token response
+    // If preventLogin is true, just return success without token
+    if (preventLogin) {
+      return res.status(201).json({
+        success: true,
+        data: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+        },
+      })
+    }
+
+    // Otherwise send token response (default behavior)
     sendTokenResponse(user, 201, res)
   } catch (error) {
     res.status(500).json({
@@ -101,6 +127,14 @@ exports.login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
+      })
+    }
+
+    // Check if user is suspended
+    if (user.status === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended. Please contact support for assistance.",
       })
     }
 

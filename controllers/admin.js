@@ -649,12 +649,37 @@ exports.downloadPosts = async (req, res) => {
 // @access  Private (Admin only)
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().select("-password")
+    // Add pagination
+    const page = Number.parseInt(req.query.page, 10) || 1
+    const limit = Number.parseInt(req.query.limit, 10) || 50
+    const startIndex = (page - 1) * limit
+
+    // Get total count for pagination
+    const total = await User.countDocuments()
+
+    // Get users with pagination
+    const users = await User.find().select("-password").skip(startIndex).limit(limit).sort({ createdAt: -1 })
+
+    // Add post count and follower count for each user
+    const enhancedUsers = await Promise.all(
+      users.map(async (user) => {
+        const postCount = await Post.countDocuments({ user: user._id })
+        return {
+          ...user.toObject(),
+          postCount,
+          followerCount: user.followers.length,
+          status: user.status || "active", // Ensure status is included
+        }
+      }),
+    )
 
     res.status(200).json({
       success: true,
       count: users.length,
-      data: users,
+      total,
+      pages: Math.ceil(total / limit),
+      currentPage: page,
+      data: enhancedUsers,
     })
   } catch (error) {
     res.status(500).json({
@@ -710,6 +735,64 @@ exports.updateUser = async (req, res) => {
     res.status(200).json({
       success: true,
       data: user,
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    })
+  }
+}
+
+// @desc    Suspend or activate a user
+// @route   PUT /api/admin/users/:id/status
+// @access  Private (Admin only)
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const { status, suspensionReason } = req.body
+
+    if (!status || !["active", "suspended"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status. Must be 'active' or 'suspended'",
+      })
+    }
+
+    // Create update object
+    const updateData = { status }
+
+    // If suspending, add reason and timestamp
+    if (status === "suspended") {
+      if (!suspensionReason) {
+        return res.status(400).json({
+          success: false,
+          message: "Suspension reason is required when suspending a user",
+        })
+      }
+      updateData.suspensionReason = suspensionReason
+      updateData.suspendedAt = Date.now()
+    } else {
+      // If activating, clear suspension data
+      updateData.suspensionReason = ""
+      updateData.suspendedAt = null
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password")
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user,
+      message: `User ${status === "active" ? "activated" : "suspended"} successfully`,
     })
   } catch (error) {
     res.status(500).json({

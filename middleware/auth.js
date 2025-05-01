@@ -30,15 +30,25 @@ exports.protect = async (req, res, next) => {
     console.log("Token verified for user:", decoded.id, "with role:", decoded.role)
 
     // Get user from the token
-    req.user = await User.findById(decoded.id)
+    const user = await User.findById(decoded.id)
 
-    if (!req.user) {
-      console.log("User not found for token")
-      return res.status(401).json({
+    if (!user) {
+      return res.status(404).json({
         success: false,
         message: "User not found",
       })
     }
+
+    // Check if user is suspended
+    if (user.status === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended. Please contact support for assistance.",
+      })
+    }
+
+    // Set user in request object
+    req.user = user
 
     // Add role to request for easier access
     req.user.role = decoded.role || req.user.role

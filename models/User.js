@@ -45,6 +45,19 @@ const UserSchema = new mongoose.Schema(
       enum: ["user", "admin"],
       default: "user",
     },
+    status: {
+      type: String,
+      enum: ["active", "suspended"],
+      default: "active",
+    },
+    suspensionReason: {
+      type: String,
+      default: "",
+    },
+    suspendedAt: {
+      type: Date,
+      default: null,
+    },
     followers: [
       {
         type: mongoose.Schema.Types.ObjectId,
