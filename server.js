@@ -116,6 +116,14 @@ app.use("/api/messages", messageRoutes)
 // Add this line where you define your routes
 app.use("/api/admin", adminRoutes)
 
+// In your server.js file, add this route near your other routes
+// This code assumes you already have imports and other code in this file
+// So I'm just showing the line you need to add
+
+// Appeals routes
+const appealRoutes = require("./routes/appeals")
+app.use("/api/appeals", appealRoutes)
+
 // Health check route
 app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "ok", message: "Server is running" })
@@ -141,4 +149,3 @@ server.listen(PORT, () => {
 
 // Make sure the ADMIN_REGISTRATION_TOKEN is available
 console.log("Admin token configured:", process.env.ADMIN_REGISTRATION_TOKEN ? "Yes" : "No")
-
