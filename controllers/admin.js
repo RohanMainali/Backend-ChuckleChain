@@ -566,7 +566,7 @@ exports.downloadPosts = async (req, res) => {
         const username = post.user ? post.user.username : "unknown"
         const sanitizedUsername = username.replace(/[^a-z0-9]/gi, "_").toLowerCase()
         const postDate = new Date(post.createdAt).toISOString().split("T")[0]
-        const filename = `${postDate}_${sanitizedUsername}_${post._id}.jpg`
+        const filename = getStandardFilename(post);
         const filePath = path.join(tempDir, filename)
 
         // Download the image
@@ -1080,6 +1080,11 @@ const generateMemeImage = async (imageBuffer, post) => {
 // @route   GET /api/admin/download-memes
 // @access  Admin
 exports.downloadMemes = async (req, res) => {
+  const getStandardFilename = (post) => {
+    const date = new Date(post.createdAt).toISOString().split("T")[0];
+    const username = post.user ? post.user.username.replace(/[^a-z0-9]/gi, "_").toLowerCase() : "unknown";
+    return `${date}_${username}_${post._id}.jpg`;
+  };  
   try {
     const { fromDate, toDate } = req.query
 
@@ -1151,6 +1156,22 @@ exports.downloadMemes = async (req, res) => {
 
     archive.append(JSON.stringify(metadata, null, 2), { name: "metadata.json" })
 
+    // Create CSV content for image name and meme caption
+    let csvContent = "Image Name,Meme Caption\n";
+
+    posts.forEach((post) => {
+      if (post.image) {
+        const date = new Date(post.createdAt).toISOString().split("T")[0];
+        const username = post.user ? post.user.username.replace(/[^a-z0-9]/gi, "_").toLowerCase() : "unknown";
+        const filename = getStandardFilename(post);
+        const caption = (post.text || "").replace(/"/g, '""'); // Escape double quotes for CSV
+        csvContent += `"${filename}","${caption}"\n`;
+      }
+    });
+
+    archive.append(csvContent, { name: "captions.csv" });
+
+
     console.log("Added metadata.json to archive")
 
     // Create a temporary directory for downloaded images
@@ -1168,7 +1189,7 @@ exports.downloadMemes = async (req, res) => {
         // Create a filename with username, date and post ID
         const date = new Date(post.createdAt).toISOString().split("T")[0]
         const username = post.user ? post.user.username.replace(/[^a-z0-9]/gi, "_").toLowerCase() : "unknown"
-        const filename = `${date}_${username}_${post._id}.jpg`
+        const filename = getStandardFilename(post);
         const filePath = path.join(tempDir, filename)
         const memePath = path.join(tempDir, `meme_${filename}`)
 
@@ -1211,19 +1232,19 @@ exports.downloadMemes = async (req, res) => {
 
           // Create a text file with meme details
           const details = `
-Post ID: ${post._id}
-User: ${post.user ? post.user.username : "unknown"}
-Text: ${post.text || ""}
-Category: ${post.category || ""}
-Created: ${post.createdAt}
-Likes: ${Array.isArray(post.likes) ? post.likes.length : 0}
-Comments: ${Array.isArray(post.comments) ? post.comments.length : 0}
-Hashtags: ${Array.isArray(post.hashtags) ? post.hashtags.join(", ") : "None"}
-Caption Placement: ${post.captionPlacement || ""}
-Image URL: ${post.image || ""}
+              Post ID: ${post._id}
+              User: ${post.user ? post.user.username : "unknown"}
+              Text: ${post.text || ""}
+              Category: ${post.category || ""}
+              Created: ${post.createdAt}
+              Likes: ${Array.isArray(post.likes) ? post.likes.length : 0}
+              Comments: ${Array.isArray(post.comments) ? post.comments.length : 0}
+              Hashtags: ${Array.isArray(post.hashtags) ? post.hashtags.join(", ") : "None"}
+              Caption Placement: ${post.captionPlacement || ""}
+              Image URL: ${post.image || ""}
           `.trim()
 
-          archive.append(details, { name: `details/${post._id}.txt` })
+          archive.append(details, { name: `details/${filename}.txt` })
 
           return { success: true, id: post._id }
         } catch (downloadError) {
